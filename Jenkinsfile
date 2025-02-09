@@ -16,6 +16,7 @@ pipeline {
                     // Check if virtual environment already exists
                     if (isUnix()) {
                         sh '''
+                            # Create the virtual environment if it doesn't exist
                             if [ ! -d "${VENV_NAME}" ]; then
                                 python3 -m venv ${VENV_NAME}  # Create the virtual environment
                             fi
@@ -25,6 +26,7 @@ pipeline {
                         '''
                     } else {
                         bat '''
+                            # Create the virtual environment if it doesn't exist
                             if not exist %VENV_NAME% (
                                 python -m venv %VENV_NAME%  # Create the virtual environment
                             )
@@ -40,14 +42,12 @@ pipeline {
         stage('Run Tests') {
             steps {
                 script {
-                    // Debugging to check current directory and files
-                    sh '''
-                        echo "Current working directory in Jenkins:"
-                        pwd
-                        echo "Listing files in current directory:"
-                        ls -alh
-                    '''
-                    
+                    // Debugging: print the current directory and list files in the workspace
+                    echo "Current directory in Jenkins:"
+                    sh 'pwd'
+                    echo "Listing files in current directory:"
+                    sh 'ls -alh'
+
                     // Run pytest with debugging output
                     if (isUnix()) {
                         sh '''
@@ -57,6 +57,7 @@ pipeline {
                             pytest --maxfail=1 --disable-warnings --tb=short --junitxml=result.xml || true
                             echo "Tests finished. Checking for result.xml..."
                             ls -alh  # List files to verify result.xml is created
+                            echo "pytest run completed"
                         '''
                     }
                 }
@@ -65,8 +66,11 @@ pipeline {
 
         stage('Publish Test Results') {
             steps {
-                // Publish JUnit Test Results
-                junit '**/result.xml' // This matches any result.xml file in subdirectories
+                script {
+                    // Assuming result.xml is in the workspace root, adjust path if necessary
+                    echo "Publishing JUnit results from result.xml"
+                    junit '**/result.xml'  // Use relative path or specific path to result.xml
+                }
             }
         }
     }
