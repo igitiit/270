@@ -16,21 +16,23 @@ pipeline {
                     // Check if virtual environment already exists
                     if (isUnix()) {
                         sh '''
+                            # Create the virtual environment if it doesn't exist
                             if [ ! -d "${VENV_NAME}" ]; then
-                                python3 -m venv ${VENV_NAME}  # Create virtual environment
+                                python3 -m venv ${VENV_NAME}  # Create the virtual environment
                             fi
-                            . ${VENV_NAME}/bin/activate  # Activate virtual environment
-                            pip install --upgrade pip
-                            pip install -r requirements.txt  // Install dependencies
+                            . ${VENV_NAME}/bin/activate  # Activate the environment
+                            pip install --upgrade pip  # Upgrade pip (optional but recommended)
+                            pip install -r requirements.txt  # Install dependencies
                         '''
                     } else {
                         bat '''
+                            # Create the virtual environment if it doesn't exist
                             if not exist %VENV_NAME% (
-                                python -m venv %VENV_NAME%  // Create virtual environment
+                                python -m venv %VENV_NAME%  # Create the virtual environment
                             )
-                            call %VENV_NAME%\\Scripts\\activate.bat  // Activate virtual environment
-                            pip install --upgrade pip
-                            pip install -r requirements.txt  // Install dependencies
+                            call %VENV_NAME%\\Scripts\\activate.bat  # Activate the environment
+                            pip install --upgrade pip  # Upgrade pip
+                            pip install -r requirements.txt  # Install dependencies
                         '''
                     }
                 }
@@ -40,43 +42,35 @@ pipeline {
         stage('Run Tests') {
             steps {
                 script {
+                    // Run pytest with debugging output
                     if (isUnix()) {
                         sh '''
-                            echo "Current directory in Jenkins:"
-                            pwd
-                            echo "Listing files in current directory before pytest:"
-                            ls -alh
                             echo "Activating virtual environment..."
-                            . ${VENV_NAME}/bin/activate  # Activate virtual environment
+                            . ${VENV_NAME}/bin/activate  # Activate the virtual environment
                             echo "Running pytest..."
-                            pytest --maxfail=1 --disable-warnings --tb=short --junitxml=./result.xml || true
-                            echo "pytest run completed. Listing files in the directory after pytest:"
-                            ls -alh  # List files again to verify result.xml is created
+                            pytest --maxfail=1 --disable-warnings --tb=short --junitxml=${WORKSPACE}/result.xml || true
+                            echo "Tests finished. Checking for result.xml..."
+                            ls -alh ${WORKSPACE}  # List files to verify result.xml is created
                         '''
                     } else {
                         bat '''
                             echo "Activating virtual environment..."
-                            call %VENV_NAME%\\Scripts\\activate.bat
+                            call %VENV_NAME%\\Scripts\\activate.bat  # Activate the virtual environment
                             echo "Running pytest..."
-                            pytest --maxfail=1 --disable-warnings --tb=short --junitxml=.\result.xml || true
-                            echo "Tests finished. Listing files in the directory after pytest:"
-                            dir  // List files to verify result.xml is created
-                            echo "pytest run completed"
+                            pytest --maxfail=1 --disable-warnings --tb=short --junitxml=%WORKSPACE%\\result.xml || true
+                            echo "Tests finished. Checking for result.xml..."
+                            dir %WORKSPACE%
                         '''
                     }
                 }
             }
         }
 
-        stage('Archive Test Results') {
-            steps {
-                script {
-                    // Make sure the result.xml is found by Jenkins
-                    echo "Looking for result.xml in the workspace:"
-                    sh 'ls -alh'  // Verify where the result.xml file is
-                    junit '**/result.xml'  // Archive the test results
-                }
-            }
+    }
+    post {
+        always {
+            // Archive test results
+            junit '**/result.xml'  // Publish the JUnit test result report
         }
     }
 }
