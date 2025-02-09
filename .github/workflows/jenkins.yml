@@ -1,0 +1,14 @@
+name: Trigger Jenkins Pipeline
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  trigger:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Jenkins Build
+        run: |
+          curl -X POST "http://127.0.0.1:8080/job/job1/build?token=1189b554b15f7ec783d5a465b29f2a6315"
