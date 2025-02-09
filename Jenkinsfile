@@ -72,7 +72,9 @@ pipeline {
             steps {
                 script {
                     // Archive test results so you can view them in Jenkins
-                    junit '**/result.xml'
+                    echo "Looking for result.xml in current directory..."
+                    sh 'ls -alh'  // Verify where the result.xml file is
+                    junit '**/result.xml'  // Archive the test results
                 }
             }
         }
