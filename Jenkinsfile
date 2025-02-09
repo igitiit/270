@@ -44,14 +44,14 @@ pipeline {
                         sh '''
                             echo "Current directory in Jenkins:"
                             pwd
-                            echo "Listing files in current directory:"
+                            echo "Listing files in current directory before pytest:"
                             ls -alh
                             echo "Activating virtual environment..."
                             . ${VENV_NAME}/bin/activate  # Activate virtual environment
                             echo "Running pytest..."
                             pytest --maxfail=1 --disable-warnings --tb=short --junitxml=./result.xml || true
-                            echo "pytest run completed. Checking for result.xml..."
-                            ls -alh  # List files to verify result.xml is created
+                            echo "pytest run completed. Listing files in the directory after pytest:"
+                            ls -alh  # List files again to verify result.xml is created
                         '''
                     } else {
                         bat '''
@@ -59,8 +59,8 @@ pipeline {
                             call %VENV_NAME%\\Scripts\\activate.bat
                             echo "Running pytest..."
                             pytest --maxfail=1 --disable-warnings --tb=short --junitxml=.\result.xml || true
-                            echo "Tests finished. Checking for result.xml..."
-                            dir  # List files to verify result.xml is created
+                            echo "Tests finished. Listing files in the directory after pytest:"
+                            dir  // List files to verify result.xml is created
                             echo "pytest run completed"
                         '''
                     }
@@ -71,8 +71,8 @@ pipeline {
         stage('Archive Test Results') {
             steps {
                 script {
-                    // Archive test results so you can view them in Jenkins
-                    echo "Looking for result.xml in current directory..."
+                    // Make sure the result.xml is found by Jenkins
+                    echo "Looking for result.xml in the workspace:"
                     sh 'ls -alh'  // Verify where the result.xml file is
                     junit '**/result.xml'  // Archive the test results
                 }
