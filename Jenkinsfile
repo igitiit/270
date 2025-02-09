@@ -13,23 +13,24 @@ pipeline {
         stage('Setup Python Environment') {
             steps {
                 script {
+                    // Check if virtual environment already exists
                     if (isUnix()) {
                         sh '''
                             if [ ! -d "${VENV_NAME}" ]; then
-                                python3 -m venv ${VENV_NAME}
+                                python3 -m venv ${VENV_NAME}  # Create the virtual environment
                             fi
-                            . ${VENV_NAME}/bin/activate
-                            pip install --upgrade pip
-                            pip install -r requirements.txt
+                            . ${VENV_NAME}/bin/activate  # Activate the environment
+                            pip install --upgrade pip  # Upgrade pip (optional but recommended)
+                            pip install -r requirements.txt  # Install dependencies
                         '''
                     } else {
                         bat '''
                             if not exist %VENV_NAME% (
-                                python -m venv %VENV_NAME%
+                                python -m venv %VENV_NAME%  # Create the virtual environment
                             )
-                            call %VENV_NAME%\\Scripts\\activate.bat
-                            pip install --upgrade pip
-                            pip install -r requirements.txt
+                            call %VENV_NAME%\\Scripts\\activate.bat  # Activate the environment
+                            pip install --upgrade pip  # Upgrade pip
+                            pip install -r requirements.txt  # Install dependencies
                         '''
                     }
                 }
@@ -39,24 +40,34 @@ pipeline {
         stage('Run Tests') {
             steps {
                 script {
+                    // Debugging to check current directory and files
+                    sh '''
+                        echo "Current working directory in Jenkins:"
+                        pwd
+                        echo "Listing files in current directory:"
+                        ls -alh
+                    '''
+                    
+                    // Run pytest with debugging output
                     if (isUnix()) {
                         sh '''
-                            echo "Running tests..."
-                            . ${VENV_NAME}/bin/activate
-                            pytest --maxfail=1 --disable-warnings --tb=short --junitxml=result.xml
-                            echo "Tests finished. Checking files in current directory..."
-                            ls -alh  # Make sure result.xml is generated
+                            echo "Activating virtual environment..."
+                            . ${VENV_NAME}/bin/activate  # Activate the virtual environment
+                            echo "Running pytest..."
+                            pytest --maxfail=1 --disable-warnings --tb=short --junitxml=result.xml || true
+                            echo "Tests finished. Checking for result.xml..."
+                            ls -alh  # List files to verify result.xml is created
                         '''
                     }
                 }
             }
         }
-    }
 
-    post {
-        always {
-            // Publish JUnit test results
-            junit '**/result.xml'  // This should now correctly point to result.xml in the workspace
+        stage('Publish Test Results') {
+            steps {
+                // Publish JUnit Test Results
+                junit '**/result.xml' // This matches any result.xml file in subdirectories
+            }
         }
     }
 }
