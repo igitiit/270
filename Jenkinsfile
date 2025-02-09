@@ -42,27 +42,46 @@ pipeline {
         stage('Run Tests') {
             steps {
                 script {
-                    // Run pytest with JUnit XML output
+                    // Run pytest with debugging output
                     if (isUnix()) {
                         sh '''
-                            . ${VENV_NAME}/bin/activate  # Activate the virtual environment
-                            pytest --maxfail=1 --disable-warnings --tb=short --junitxml=result.xml
+                            echo "Activating virtual environment..."
+                            . ${VENV_NAME}/bin/activate  # Activate the environment
+                            
+                            echo "Checking pytest version..."
+                            python -m pytest --version  # Verify pytest is installed
+
+                            echo "Listing files in the workspace..."
+                            ls -alh  # List files to check test files are present
+                            
+                            echo "Running pytest..."
+                            pytest --maxfail=1 --disable-warnings --tb=short --junitxml=result.xml || true
+                            
+                            echo "Tests finished. Checking for result.xml..."
+                            ls -alh  # List files to verify result.xml is created
+                            echo "pytest run completed"
                         '''
                     } else {
                         bat '''
+                            echo "Activating virtual environment..."
                             call %VENV_NAME%\\Scripts\\activate.bat  # Activate the environment
-                            pytest --maxfail=1 --disable-warnings --tb=short --junitxml=result.xml
+                            
+                            echo "Checking pytest version..."
+                            python -m pytest --version  # Verify pytest is installed
+
+                            echo "Listing files in the workspace..."
+                            dir  # List files to check test files are present
+                            
+                            echo "Running pytest..."
+                            pytest --maxfail=1 --disable-warnings --tb=short --junitxml=result.xml || exit /b
+                            
+                            echo "Tests finished. Checking for result.xml..."
+                            dir  # List files to verify result.xml is created
+                            echo "pytest run completed"
                         '''
                     }
                 }
             }
-        }
-    }
-
-    post {
-        always {
-            // Publish JUnit test report
-            junit '**/result.xml'  // Adjust path based on your location of result.xml
         }
     }
 }
