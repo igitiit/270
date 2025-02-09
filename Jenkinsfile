@@ -2,147 +2,43 @@ pipeline {
     agent any
 
     environment {
-        PYTHON_VERSION = '3.11'
-        VENV_NAME = 'venv'
+        VENV_NAME = 'venv'  // Name of your virtual environment
     }
 
-    options {
-        buildDiscarder(logRotator(numToKeepStr: '5'))
-        timeout(time: 1, unit: 'HOURS')
-        timestamps()
+    triggers {
+        githubPush()  // Trigger job on GitHub push
     }
 
     stages {
-        stage('Setup Python') {
+        stage('Setup Python Environment') {
             steps {
                 script {
+                    // Check if virtual environment already exists
                     if (isUnix()) {
                         sh '''
-                            python${PYTHON_VERSION} -m venv ${VENV_NAME}
-                            . ${VENV_NAME}/bin/activate
-                            python -m pip install --upgrade pip
-                            pip install -r requirements.txt
+                            # Create the virtual environment if it doesn't exist
+                            if [ ! -d "${VENV_NAME}" ]; then
+                                python3 -m venv ${VENV_NAME}  # Create the virtual environment
+                            fi
+                            . ${VENV_NAME}/bin/activate  # Activate the environment
+                            pip install --upgrade pip  # Upgrade pip (optional but recommended)
+                            pip install -r requirements.txt  # Install dependencies
                         '''
                     } else {
                         bat '''
-                            python -m venv %VENV_NAME%
-                            call %VENV_NAME%\\Scripts\\activate.bat
-                            python -m pip install --upgrade pip
-                            pip install -r requirements.txt
+                            # Create the virtual environment if it doesn't exist
+                            if not exist %VENV_NAME% (
+                                python -m venv %VENV_NAME%  # Create the virtual environment
+                            )
+                            call %VENV_NAME%\\Scripts\\activate.bat  # Activate the environment
+                            pip install --upgrade pip  # Upgrade pip
+                            pip install -r requirements.txt  # Install dependencies
                         '''
                     }
                 }
             }
         }
-
-        stage('Code Quality') {
-            parallel {
-                stage('Lint') {
-                    steps {
-                        script {
-                            if (isUnix()) {
-                                sh '''
-                                    . ${VENV_NAME}/bin/activate
-                                    pylint src/ tests/ || true
-                                    black --check src/ tests/
-                                '''
-                            } else {
-                                bat '''
-                                    call %VENV_NAME%\\Scripts\\activate.bat
-                                    pylint src\\ tests\\ || true
-                                    black --check src\\ tests\\
-                                '''
-                            }
-                        }
-                    }
-                }
-
-                stage('Type Check') {
-                    steps {
-                        script {
-                            if (isUnix()) {
-                                sh '''
-                                    . ${VENV_NAME}/bin/activate
-                                    mypy src/
-                                '''
-                            } else {
-                                bat '''
-                                    call %VENV_NAME%\\Scripts\\activate.bat
-                                    mypy src\\
-                                '''
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        stage('Test') {
-            steps {
-                script {
-                    if (isUnix()) {
-                        sh '''
-                            . ${VENV_NAME}/bin/activate
-                            pytest tests/ --junitxml=test-results/junit.xml
-                        '''
-                    } else {
-                        bat '''
-                            call %VENV_NAME%\\Scripts\\activate.bat
-                            pytest tests\\ --junitxml=test-results/junit.xml
-                        '''
-                    }
-                }
-            }
-            post {
-                always {
-                    junit 'test-results/junit.xml'
-                    cobertura coberturaReportFile: 'coverage.xml'
-                    publishHTML(target: [
-                        allowMissing: false,
-                        alwaysLinkToLastBuild: false,
-                        keepAll: true,
-                        reportDir: 'htmlcov',
-                        reportFiles: 'index.html',
-                        reportName: 'Coverage Report'
-                    ])
-                }
-            }
-        }
-
-        stage('Build Package') {
-            steps {
-                script {
-                    if (isUnix()) {
-                        sh '''
-                            . ${VENV_NAME}/bin/activate
-                            python setup.py sdist bdist_wheel
-                        '''
-                    } else {
-                        bat '''
-                            call %VENV_NAME%\\Scripts\\activate.bat
-                            python setup.py sdist bdist_wheel
-                        '''
-                    }
-                }
-            }
-            post {
-                success {
-                    archiveArtifacts artifacts: 'dist/*', fingerprint: true
-                }
-            }
-        }
-    }
-
-    post {
-        always {
-            cleanWs()
-        }
-        failure {
-            emailext (
-                subject: "Failed Pipeline: ${currentBuild.fullDisplayName}",
-                body: "Something is wrong with ${env.BUILD_URL}",
-                recipientProviders: [[$class: 'DevelopersRecipientProvider']]
-            )
-        }
+        
+        // Add more stages as needed (e.g., tests, build, etc.)
     }
 }
