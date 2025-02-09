@@ -38,7 +38,31 @@ pipeline {
                 }
             }
         }
-        
-        // Add more stages as needed (e.g., tests, build, etc.)
+
+        stage('Run Tests') {
+            steps {
+                script {
+                    // Run pytest with JUnit XML output
+                    if (isUnix()) {
+                        sh '''
+                            . ${VENV_NAME}/bin/activate  # Activate the virtual environment
+                            pytest --maxfail=1 --disable-warnings --tb=short --junitxml=result.xml
+                        '''
+                    } else {
+                        bat '''
+                            call %VENV_NAME%\\Scripts\\activate.bat  # Activate the environment
+                            pytest --maxfail=1 --disable-warnings --tb=short --junitxml=result.xml
+                        '''
+                    }
+                }
+            }
+        }
+    }
+
+    post {
+        always {
+            // Publish JUnit test report
+            junit '**/result.xml'  // Adjust path based on your location of result.xml
+        }
     }
 }
