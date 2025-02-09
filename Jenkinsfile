@@ -2,39 +2,16 @@ pipeline {
     agent any
 
     environment {
-        VENV_NAME = 'venv'  // Name of your virtual environment
-    }
-
-    triggers {
-        githubPush()  // Trigger job on GitHub push
+        VENV_NAME = 'venv'  // Adjust if your virtual environment is named differently
     }
 
     stages {
-        stage('Setup Python Environment') {
+        stage('Setup') {
             steps {
                 script {
-                    // Check if virtual environment already exists
-                    if (isUnix()) {
-                        sh '''
-                            # Create the virtual environment if it doesn't exist
-                            if [ ! -d "${VENV_NAME}" ]; then
-                                python3 -m venv ${VENV_NAME}  # Create the virtual environment
-                            fi
-                            . ${VENV_NAME}/bin/activate  # Activate the environment
-                            pip install --upgrade pip  # Upgrade pip (optional but recommended)
-                            pip install -r requirements.txt  # Install dependencies
-                        '''
-                    } else {
-                        bat '''
-                            # Create the virtual environment if it doesn't exist
-                            if not exist %VENV_NAME% (
-                                python -m venv %VENV_NAME%  # Create the virtual environment
-                            )
-                            call %VENV_NAME%\\Scripts\\activate.bat  # Activate the environment
-                            pip install --upgrade pip  # Upgrade pip
-                            pip install -r requirements.txt  # Install dependencies
-                        '''
-                    }
+                    // Setup Virtualenv if not already set
+                    sh 'python3 -m venv ${VENV_NAME}'  // Only do this once, or if necessary
+                    sh './${VENV_NAME}/bin/pip install -r requirements.txt'
                 }
             }
         }
@@ -42,14 +19,10 @@ pipeline {
         stage('Run Tests') {
             steps {
                 script {
-                    // Debugging: print the current directory and list files in the workspace
-                    echo "Current directory in Jenkins:"
-                    sh 'pwd'
-                    echo "Listing files in current directory:"
-                    sh 'ls -alh'
-
                     // Run pytest with debugging output
+                    echo "Running pytest..."
                     if (isUnix()) {
+                        // Activate virtual environment and run pytest
                         sh '''
                             echo "Activating virtual environment..."
                             . ${VENV_NAME}/bin/activate  # Activate the virtual environment
@@ -57,20 +30,17 @@ pipeline {
                             pytest --maxfail=1 --disable-warnings --tb=short --junitxml=result.xml || true
                             echo "Tests finished. Checking for result.xml..."
                             ls -alh  # List files to verify result.xml is created
-                            echo "pytest run completed"
                         '''
                     }
                 }
             }
         }
 
-        stage('Publish Test Results') {
+        stage('Publish JUnit Results') {
             steps {
-                script {
-                    // Assuming result.xml is in the workspace root, adjust path if necessary
-                    echo "Publishing JUnit results from result.xml"
-                    junit '**/result.xml'  // Use relative path or specific path to result.xml
-                }
+                echo "Looking for result.xml in workspace"
+                // Make sure the correct path is used here for the result.xml
+                junit '**/result.xml'  // Adjust path if result.xml is in a subfolder like 'tests/'
             }
         }
     }
