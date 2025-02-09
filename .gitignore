@@ -1,0 +1,21 @@
+# Byte-compiled / compiled Python files
+__pycache__/
+*.py[cod]
+*.so
+.mypy_cache/
+.pytest_cache/
+.venv/
+venv/
+
+# Virtual environment
+env/
+.env
+
+# Distribution / packaging
+build/
+dist/
+*.egg-info/
+
+# Logs and temp files
+*.log
+*.tmp
