@@ -12,11 +12,34 @@ jobs:
       - name: Get Jenkins Crumb
         run: |
           # Using your Jenkins username 'jpapadem' and the token '1189b554b15f7ec783d5a465b29f2a6315'
-          CRUMB=$(curl -u jpapadem:1189b554b15f7ec783d5a465b29f2a6315 "https://wet-lemons-heal.loca.lt/crumbIssuer/api/json" | jq -r '.crumb')
+          CRUMB=$(curl -u jpapadem:1189b554b15f7ec783d5a465b29f2a6315 "https://cool-pears-cry.loca.lt/crumbIssuer/api/json" | jq -r '.crumb')
           echo "JENKINS_CRUMB=$CRUMB" >> $GITHUB_ENV
 
       - name: Trigger Jenkins Build
         run: |
-          # Trigger the Jenkins job with the crumb included in the header
-          curl -X POST "https://wet-lemons-heal.loca.lt/job/job1/build?token=1189b554b15f7ec783d5a465b29f2a6315" \
-            -H "Jenkins-Crumb: $JENKINS_CRUMB"
+          # Trigger the Jenkins job and check the response
+          RESPONSE=$(curl -X POST "https://cool-pears-cry.loca.lt/job/job1/build?token=1189b554b15f7ec783d5a465b29f2a6315" \
+            -H "Jenkins-Crumb: $JENKINS_CRUMB" -w "%{http_code}" -o /dev/null)
+          
+          echo "Response Code: $RESPONSE"
+          if [ "$RESPONSE" -ne 200 ]; then
+            echo "Failed to trigger Jenkins job."
+            exit 1
+          fi
+
+      - name: Check Jenkins Job Status (Optional)
+        run: |
+          # Check if Jenkins job is triggered successfully
+          # Wait for the job to start (optional step to add a delay if needed)
+          echo "Waiting for Jenkins job to start..."
+          sleep 10  # Optional: Increase delay if needed
+          
+          # Check the status of the job
+          JOB_STATUS=$(curl -u jpapadem:1189b554b15f7ec783d5a465b29f2a6315 \
+            "https://cool-pears-cry.loca.lt/job/job1/lastBuild/api/json" | jq -r '.result')
+          
+          echo "Jenkins Job Status: $JOB_STATUS"
+          if [ "$JOB_STATUS" != "SUCCESS" ] && [ "$JOB_STATUS" != "FAILURE" ]; then
+            echo "Jenkins job is still in progress."
+            exit 1
+          fi
