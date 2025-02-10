@@ -12,13 +12,13 @@ jobs:
       - name: Get Jenkins Crumb
         run: |
           # Using your Jenkins username 'jpapadem' and the token '1189b554b15f7ec783d5a465b29f2a6315'
-          CRUMB=$(curl -u jpapadem:1189b554b15f7ec783d5a465b29f2a6315 "https://every-wasps-laugh.loca.lt/crumbIssuer/api/json" | jq -r '.crumb')
+          CRUMB=$(curl -u jpapadem:1189b554b15f7ec783d5a465b29f2a6315 "https://clever-webs-sin.loca.lt/crumbIssuer/api/json" | jq -r '.crumb')
           echo "JENKINS_CRUMB=$CRUMB" >> $GITHUB_ENV
 
       - name: Trigger Jenkins Build
         run: |
           # Trigger the Jenkins job and check the response
-          RESPONSE=$(curl -X POST "https://every-wasps-laugh.loca.lt/job/job1/build?token=1189b554b15f7ec783d5a465b29f2a6315" \
+          RESPONSE=$(curl -X POST "https://clever-webs-sin.loca.lt/job/job1/build?token=1189b554b15f7ec783d5a465b29f2a6315" \
             -H "Jenkins-Crumb: $JENKINS_CRUMB" -w "%{http_code}" -o /dev/null)
           
           echo "Response Code: $RESPONSE"
@@ -36,7 +36,7 @@ jobs:
           
           # Check the status of the job
           JOB_STATUS=$(curl -u jpapadem:1189b554b15f7ec783d5a465b29f2a6315 \
-            "https://every-wasps-laugh.loca.lt/job/job1/lastBuild/api/json" | jq -r '.result')
+            "https://clever-webs-sin.loca.lt/job/job1/lastBuild/api/json" | jq -r '.result')
           
           echo "Jenkins Job Status: $JOB_STATUS"
           if [ "$JOB_STATUS" != "SUCCESS" ] && [ "$JOB_STATUS" != "FAILURE" ]; then
