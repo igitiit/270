@@ -11,35 +11,50 @@ jobs:
     steps:
       - name: Get Jenkins Crumb
         run: |
-          # Using your Jenkins username 'jpapadem' and the token '1189b554b15f7ec783d5a465b29f2a6315'
-          CRUMB=$(curl -u jpapadem:1189b554b15f7ec783d5a465b29f2a6315 "https://clever-webs-sin.loca.lt/crumbIssuer/api/json" | jq -r '.crumb')
+          # Fetch Jenkins crumb if required (some configurations disable CSRF protection)
+          CRUMB=$(curl -u jpapadem:1189b554b15f7ec783d5a465b29f2a6315 \
+            "https://eager-moments-read.loca.lt/crumbIssuer/api/json" | jq -r '.crumb' || echo "")
+
           echo "JENKINS_CRUMB=$CRUMB" >> $GITHUB_ENV
 
       - name: Trigger Jenkins Build
         run: |
-          # Trigger the Jenkins job and check the response
-          RESPONSE=$(curl -X POST "https://clever-webs-sin.loca.lt/job/job1/build?token=1189b554b15f7ec783d5a465b29f2a6315" \
+          # Trigger the Jenkins job
+          RESPONSE=$(curl -X POST "https://eager-moments-read.loca.lt/job/job1/build?token=1189b554b15f7ec783d5a465b29f2a6315" \
             -H "Jenkins-Crumb: $JENKINS_CRUMB" -w "%{http_code}" -o /dev/null)
           
           echo "Response Code: $RESPONSE"
-          if [ "$RESPONSE" -ne 200 ]; then
+          if [ "$RESPONSE" -ne 201 ]; then
             echo "Failed to trigger Jenkins job."
             exit 1
           fi
 
-      - name: Check Jenkins Job Status (Optional)
+      - name: Check Jenkins Job Status
         run: |
-          # Check if Jenkins job is triggered successfully
-          # Wait for the job to start (optional step to add a delay if needed)
-          echo "Waiting for Jenkins job to start..."
-          sleep 10  # Optional: Increase delay if needed
-          
-          # Check the status of the job
-          JOB_STATUS=$(curl -u jpapadem:1189b554b15f7ec783d5a465b29f2a6315 \
-            "https://clever-webs-sin.loca.lt/job/job1/lastBuild/api/json" | jq -r '.result')
-          
-          echo "Jenkins Job Status: $JOB_STATUS"
-          if [ "$JOB_STATUS" != "SUCCESS" ] && [ "$JOB_STATUS" != "FAILURE" ]; then
-            echo "Jenkins job is still in progress."
-            exit 1
-          fi
+          # Poll Jenkins job status every 5 seconds, up to 60 seconds
+          echo "Waiting for Jenkins job to complete..."
+          ATTEMPTS=0
+          MAX_ATTEMPTS=12  # 12 * 5 seconds = 60 seconds
+
+          while [ $ATTEMPTS -lt $MAX_ATTEMPTS ]; do
+            JOB_STATUS=$(curl -u jpapadem:1189b554b15f7ec783d5a465b29f2a6315 \
+              "https://eager-moments-read.loca.lt/job/job1/lastBuild/api/json" | jq -r '.result')
+
+            echo "Jenkins Job Status: $JOB_STATUS"
+
+            if [[ "$JOB_STATUS" == "SUCCESS" ]]; then
+              echo "Jenkins job completed successfully!"
+              exit 0
+            elif [[ "$JOB_STATUS" == "FAILURE" ]]; then
+              echo "Jenkins job failed!"
+              exit 1
+            fi
+
+            # Wait and retry
+            echo "Job still running... Checking again in 5 seconds."
+            sleep 5
+            ((ATTEMPTS++))
+          done
+
+          echo "Jenkins job did not complete in time."
+          exit 1
