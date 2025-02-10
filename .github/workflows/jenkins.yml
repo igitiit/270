@@ -12,7 +12,7 @@ jobs:
       - name: Get Jenkins Crumb
         run: |
           # Fetch Jenkins crumb if required (some configurations disable CSRF protection)
-          CRUMB=$(curl -u jpapadem:1189b554b15f7ec783d5a465b29f2a6315 \
+          CRUMB=$(curl -u jpapadem:11e4a4fb90eddbdeef7f24ed4cfe835924 \
             "https://real-wolves-attack.loca.lt/crumbIssuer/api/json" | jq -r '.crumb' || echo "")
 
           echo "JENKINS_CRUMB=$CRUMB" >> $GITHUB_ENV
@@ -20,7 +20,7 @@ jobs:
       - name: Trigger Jenkins Build
         run: |
           # Trigger the Jenkins job
-          RESPONSE=$(curl -X POST "https://real-wolves-attack.loca.lt/job/job1/build?token=1189b554b15f7ec783d5a465b29f2a6315" \
+          RESPONSE=$(curl -X POST "https://real-wolves-attack.loca.lt/job/job1/build?token=11e4a4fb90eddbdeef7f24ed4cfe835924" \
             -H "Jenkins-Crumb: $JENKINS_CRUMB" -w "%{http_code}" -o /dev/null)
           
           echo "Response Code: $RESPONSE"
@@ -37,7 +37,7 @@ jobs:
           MAX_ATTEMPTS=12  # 12 * 5 seconds = 60 seconds
 
           while [ $ATTEMPTS -lt $MAX_ATTEMPTS ]; do
-            JOB_STATUS=$(curl -u jpapadem:1189b554b15f7ec783d5a465b29f2a6315 \
+            JOB_STATUS=$(curl -u jpapadem:11e4a4fb90eddbdeef7f24ed4cfe835924 \
               "https://real-wolves-attack.loca.lt/job/job1/lastBuild/api/json" | jq -r '.result')
 
             echo "Jenkins Job Status: $JOB_STATUS"
