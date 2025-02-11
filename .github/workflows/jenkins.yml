@@ -1,5 +1,4 @@
 name: Trigger Jenkins Pipeline
-
 on:
   push:
     branches:
@@ -10,52 +9,91 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Get Jenkins Crumb
+        id: get-crumb
         run: |
-          # Fetch Jenkins crumb if required (some configurations disable CSRF protection)
-          CRUMB=$(curl -u jpapadem:11e4a4fb90eddbdeef7f24ed4cfe835924 \
-            "https://yellow-turkeys-turn.loca.lt/crumbIssuer/api/json" | jq -r '.crumb' || echo "")
-
+          echo "Fetching Jenkins crumb..."
+          CRUMB=$(curl -s -u jpapadem:11e4a4fb90eddbdeef7f24ed4cfe835924 \
+            "https://yellow-turkeys-turn.loca.lt/crumbIssuer/api/json" \
+            -H "Content-Type: application/json" \
+            --fail \
+            | jq -r '.crumb')
+          
+          if [ -z "$CRUMB" ]; then
+            echo "Failed to obtain Jenkins crumb"
+            exit 1
+          fi
+          
           echo "JENKINS_CRUMB=$CRUMB" >> $GITHUB_ENV
           echo "Jenkins Crumb: $CRUMB"
 
-      - name: Trigger Jenkins Build
+      - name: Verify Jenkins Connection
         run: |
-          # Trigger the Jenkins job
-          RESPONSE=$(curl -X POST "https://yellow-turkeys-turn.loca.lt/job/job1/build?token=11e4a4fb90eddbdeef7f24ed4cfe835924" \
-            -H "Jenkins-Crumb: $JENKINS_CRUMB" -w "%{http_code}" -o /dev/null)
+          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
+            -u jpapadem:11e4a4fb90eddbdeef7f24ed4cfe835924 \
+            "https://yellow-turkeys-turn.loca.lt/api/json")
           
-          echo "Response Code: $RESPONSE"
-          if [ "$RESPONSE" -ne 201 ]; then
-            echo "Failed to trigger Jenkins job."
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "Failed to connect to Jenkins (HTTP ${HTTP_CODE})"
             exit 1
           fi
+          echo "Jenkins connection verified successfully"
+
+      - name: Trigger Jenkins Build
+        run: |
+          echo "Triggering Jenkins job..."
+          RESPONSE=$(curl -s -u jpapadem:11e4a4fb90eddbdeef7f24ed4cfe835924 \
+            -X POST \
+            "https://yellow-turkeys-turn.loca.lt/job/job1/build?token=11e4a4fb90eddbdeef7f24ed4cfe835924" \
+            -H "Jenkins-Crumb: $JENKINS_CRUMB" \
+            -H "Content-Type: application/json" \
+            --fail \
+            -w "%{http_code}" \
+            -o /dev/null)
+          
+          echo "Response Code: $RESPONSE"
+          if [ "$RESPONSE" -ne 201 ] && [ "$RESPONSE" -ne 200 ]; then
+            echo "Failed to trigger Jenkins job"
+            exit 1
+          fi
+          echo "Jenkins job triggered successfully"
 
       - name: Check Jenkins Job Status
         run: |
-          # Poll Jenkins job status every 5 seconds, up to 60 seconds
           echo "Waiting for Jenkins job to complete..."
           ATTEMPTS=0
-          MAX_ATTEMPTS=12  # 12 * 5 seconds = 60 seconds
-
+          MAX_ATTEMPTS=12  # 12 * 5 seconds = 60 seconds timeout
+          
           while [ $ATTEMPTS -lt $MAX_ATTEMPTS ]; do
-            JOB_STATUS=$(curl -u jpapadem:11e4a4fb90eddbdeef7f24ed4cfe835924 \
-              "https://yellow-turkeys-turn.loca.lt/job/job1/lastBuild/api/json" | jq -r '.result')
-
-            echo "Jenkins Job Status: $JOB_STATUS"
-
-            if [[ "$JOB_STATUS" == "SUCCESS" ]]; then
-              echo "Jenkins job completed successfully!"
-              exit 0
-            elif [[ "$JOB_STATUS" == "FAILURE" ]]; then
-              echo "Jenkins job failed!"
+            STATUS_RESPONSE=$(curl -s -u jpapadem:11e4a4fb90eddbdeef7f24ed4cfe835924 \
+              "https://yellow-turkeys-turn.loca.lt/job/job1/lastBuild/api/json" \
+              -H "Content-Type: application/json" \
+              --fail)
+            
+            if [ $? -ne 0 ]; then
+              echo "Failed to fetch job status"
               exit 1
             fi
-
-            # Wait and retry
+            
+            JOB_STATUS=$(echo "$STATUS_RESPONSE" | jq -r '.result')
+            BUILDING=$(echo "$STATUS_RESPONSE" | jq -r '.building')
+            
+            echo "Jenkins Job Status: $JOB_STATUS (Building: $BUILDING)"
+            
+            if [ "$JOB_STATUS" = "SUCCESS" ]; then
+              echo "Jenkins job completed successfully!"
+              exit 0
+            elif [ "$JOB_STATUS" = "FAILURE" ]; then
+              echo "Jenkins job failed!"
+              exit 1
+            elif [ "$JOB_STATUS" = "ABORTED" ]; then
+              echo "Jenkins job was aborted!"
+              exit 1
+            fi
+            
             echo "Job still running... Checking again in 5 seconds."
             sleep 5
             ((ATTEMPTS++))
           done
-
-          echo "Jenkins job did not complete in time."
+          
+          echo "Jenkins job did not complete within the timeout period (60 seconds)"
           exit 1
