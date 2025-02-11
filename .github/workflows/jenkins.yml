@@ -11,46 +11,66 @@ jobs:
     steps:
       - name: Get Jenkins Crumb
         run: |
-          # Fetch Jenkins crumb if required (some configurations disable CSRF protection)
-          CRUMB=$(curl -u jpapadem:11e4a4fb90eddbdeef7f24ed4cfe835924 \
-            "https://loud-cobras-repeat.loca.lt/crumbIssuer/api/json" | jq -r '.crumb' || echo "")
-
-          echo "JENKINS_CRUMB=$CRUMB" >> $GITHUB_ENV
+          JENKINS_URL="https://loud-cobras-repeat.loca.lt"
+          JENKINS_USER="jpapadem"
+          JENKINS_API_TOKEN="11e4a4fb90eddbdeef7f24ed4cfe835924"  # Replace with your actual API token
+          
+          echo "Fetching Jenkins crumb..."
+          CRUMB_RESPONSE=$(curl -sS -u "${JENKINS_USER}:${JENKINS_API_TOKEN}" "${JENKINS_URL}/crumbIssuer/api/json")
+          
+          if [[ $? -ne 0 ]]; then
+            echo "Failed to fetch crumb. Response: ${CRUMB_RESPONSE}"
+            exit 1
+          fi
+          
+          CRUMB=$(echo "${CRUMB_RESPONSE}" | jq -r '.crumb')
+          
+          if [[ -z "${CRUMB}" ]]; then
+            echo "Failed to extract crumb from response: ${CRUMB_RESPONSE}"
+            exit 1
+          fi
+          
+          echo "JENKINS_CRUMB=${CRUMB}" >> $GITHUB_ENV
+          echo "JENKINS_URL=${JENKINS_URL}" >> $GITHUB_ENV
+          echo "JENKINS_USER=${JENKINS_USER}" >> $GITHUB_ENV
+          echo "JENKINS_API_TOKEN=${JENKINS_API_TOKEN}" >> $GITHUB_ENV
 
       - name: Trigger Jenkins Build
         run: |
-          # Trigger the Jenkins job
-          RESPONSE=$(curl -X POST "https://loud-cobras-repeat.loca.lt/job/job1/build?token=11e4a4fb90eddbdeef7f24ed4cfe835924" \
-            -H "Jenkins-Crumb: $JENKINS_CRUMB" -w "%{http_code}" -o /dev/null)
+          echo "Triggering Jenkins job..."
+          RESPONSE=$(curl -sS -X POST "${JENKINS_URL}/job/job1/build?token=11e4a4fb90eddbdeef7f24ed4cfe835924" \
+            -u "${JENKINS_USER}:${JENKINS_API_TOKEN}" \
+            -H "Jenkins-Crumb: ${JENKINS_CRUMB}" \
+            -w "%{http_code}" -o /dev/null)
           
-          echo "Response Code: $RESPONSE"
-          if [ "$RESPONSE" -ne 201 ]; then
-            echo "Failed to trigger Jenkins job."
+          echo "Response Code: ${RESPONSE}"
+          if [[ "${RESPONSE}" -ne 201 ]]; then
+            echo "Failed to trigger Jenkins job. Response code: ${RESPONSE}"
             exit 1
           fi
+          
+          echo "Jenkins job triggered successfully!"
 
       - name: Check Jenkins Job Status
         run: |
-          # Poll Jenkins job status every 5 seconds, up to 60 seconds
           echo "Waiting for Jenkins job to complete..."
           ATTEMPTS=0
           MAX_ATTEMPTS=12  # 12 * 5 seconds = 60 seconds
 
-          while [ $ATTEMPTS -lt $MAX_ATTEMPTS ]; do
-            JOB_STATUS=$(curl -u jpapadem:11e4a4fb90eddbdeef7f24ed4cfe835924 \
-              "https://loud-cobras-repeat.loca.lt/job/job1/lastBuild/api/json" | jq -r '.result')
+          while [[ $ATTEMPTS -lt $MAX_ATTEMPTS ]]; do
+            JOB_STATUS=$(curl -sS -u "${JENKINS_USER}:${JENKINS_API_TOKEN}" \
+              "${JENKINS_URL}/job/job1/lastBuild/api/json" | jq -r '.result')
 
-            echo "Jenkins Job Status: $JOB_STATUS"
+            echo "Jenkins Job Status: ${JOB_STATUS}"
 
-            if [[ "$JOB_STATUS" == "SUCCESS" ]]; then
+            if [[ "${JOB_STATUS}" == "SUCCESS" ]]; then
               echo "Jenkins job completed successfully!"
               exit 0
-            elif [[ "$JOB_STATUS" == "FAILURE" ]]; then
+            elif [[ "${JOB_STATUS}" == "FAILURE" ]]; then
               echo "Jenkins job failed!"
               exit 1
             fi
 
-            # Wait and retry
             echo "Job still running... Checking again in 5 seconds."
             sleep 5
             ((ATTEMPTS++))
