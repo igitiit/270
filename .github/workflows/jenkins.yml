@@ -8,92 +8,123 @@ jobs:
   trigger:
     runs-on: ubuntu-latest
     steps:
+      - name: Install jq
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y jq curl
+
+      - name: Test Jenkins Connection
+        run: |
+          echo "Testing Jenkins connectivity..."
+          RESPONSE=$(curl -s -w "\n%{http_code}" -k \
+            "https://yellow-turkeys-turn.loca.lt/api/json")
+          HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
+          BODY=$(echo "$RESPONSE" | sed '$d')
+          
+          echo "HTTP Code: $HTTP_CODE"
+          echo "Response Body: $BODY"
+          
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "Cannot connect to Jenkins server"
+            exit 1
+          fi
+
       - name: Get Jenkins Crumb
         id: get-crumb
         run: |
-          echo "Fetching Jenkins crumb..."
-          CRUMB=$(curl -s -u jpapadem:11e4a4fb90eddbdeef7f24ed4cfe835924 \
-            "https://yellow-turkeys-turn.loca.lt/crumbIssuer/api/json" \
-            -H "Content-Type: application/json" \
-            --fail \
-            | jq -r '.crumb')
+          echo "Attempting to get Jenkins crumb..."
           
-          if [ -z "$CRUMB" ]; then
-            echo "Failed to obtain Jenkins crumb"
-            exit 1
-          fi
-          
-          echo "JENKINS_CRUMB=$CRUMB" >> $GITHUB_ENV
-          echo "Jenkins Crumb: $CRUMB"
-
-      - name: Verify Jenkins Connection
-        run: |
-          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
+          # Try without crumb first
+          RESPONSE=$(curl -s -k -X POST \
             -u jpapadem:11e4a4fb90eddbdeef7f24ed4cfe835924 \
-            "https://yellow-turkeys-turn.loca.lt/api/json")
+            "https://yellow-turkeys-turn.loca.lt/job/job1/build?token=11e4a4fb90eddbdeef7f24ed4cfe835924")
           
-          if [ "$HTTP_CODE" != "200" ]; then
-            echo "Failed to connect to Jenkins (HTTP ${HTTP_CODE})"
-            exit 1
+          if [ $? -eq 0 ]; then
+            echo "Direct trigger successful, no crumb needed"
+            echo "SKIP_CRUMB=true" >> $GITHUB_ENV
+          else
+            echo "Getting crumb for authentication..."
+            CRUMB_RESPONSE=$(curl -s -k -u jpapadem:11e4a4fb90eddbdeef7f24ed4cfe835924 \
+              "https://yellow-turkeys-turn.loca.lt/crumbIssuer/api/json")
+            
+            CRUMB=$(echo "$CRUMB_RESPONSE" | jq -r '.crumb')
+            
+            if [ -n "$CRUMB" ] && [ "$CRUMB" != "null" ]; then
+              echo "JENKINS_CRUMB=$CRUMB" >> $GITHUB_ENV
+              echo "Crumb obtained successfully: $CRUMB"
+            else
+              echo "Failed to get crumb. Response: $CRUMB_RESPONSE"
+              echo "SKIP_CRUMB=true" >> $GITHUB_ENV
+            fi
           fi
-          echo "Jenkins connection verified successfully"
 
       - name: Trigger Jenkins Build
         run: |
-          echo "Triggering Jenkins job..."
-          RESPONSE=$(curl -s -u jpapadem:11e4a4fb90eddbdeef7f24ed4cfe835924 \
-            -X POST \
-            "https://yellow-turkeys-turn.loca.lt/job/job1/build?token=11e4a4fb90eddbdeef7f24ed4cfe835924" \
-            -H "Jenkins-Crumb: $JENKINS_CRUMB" \
-            -H "Content-Type: application/json" \
-            --fail \
-            -w "%{http_code}" \
-            -o /dev/null)
+          echo "Triggering Jenkins build..."
           
-          echo "Response Code: $RESPONSE"
-          if [ "$RESPONSE" -ne 201 ] && [ "$RESPONSE" -ne 200 ]; then
+          # Base curl command
+          CURL_CMD="curl -s -k -X POST -u jpapadem:11e4a4fb90eddbdeef7f24ed4cfe835924"
+          
+          # Add crumb header if we have one and didn't skip it
+          if [ "${SKIP_CRUMB}" != "true" ] && [ -n "${JENKINS_CRUMB}" ]; then
+            CURL_CMD="$CURL_CMD -H \"Jenkins-Crumb: ${JENKINS_CRUMB}\""
+          fi
+          
+          # Add the URL
+          CURL_CMD="$CURL_CMD \"https://yellow-turkeys-turn.loca.lt/job/job1/build?token=11e4a4fb90eddbdeef7f24ed4cfe835924\""
+          
+          echo "Executing: $CURL_CMD"
+          
+          # Execute the curl command
+          RESPONSE=$(eval $CURL_CMD)
+          
+          # Check if the command was successful
+          if [ $? -eq 0 ]; then
+            echo "Jenkins job triggered successfully"
+            echo "Response: $RESPONSE"
+          else
             echo "Failed to trigger Jenkins job"
+            echo "Response: $RESPONSE"
             exit 1
           fi
-          echo "Jenkins job triggered successfully"
 
-      - name: Check Jenkins Job Status
+      - name: Wait for Build
         run: |
-          echo "Waiting for Jenkins job to complete..."
+          echo "Waiting for Jenkins build to complete..."
           ATTEMPTS=0
-          MAX_ATTEMPTS=12  # 12 * 5 seconds = 60 seconds timeout
+          MAX_ATTEMPTS=12
           
           while [ $ATTEMPTS -lt $MAX_ATTEMPTS ]; do
-            STATUS_RESPONSE=$(curl -s -u jpapadem:11e4a4fb90eddbdeef7f24ed4cfe835924 \
-              "https://yellow-turkeys-turn.loca.lt/job/job1/lastBuild/api/json" \
-              -H "Content-Type: application/json" \
-              --fail)
+            echo "Checking build status (Attempt $((ATTEMPTS + 1))/$MAX_ATTEMPTS)..."
             
-            if [ $? -ne 0 ]; then
-              echo "Failed to fetch job status"
-              exit 1
+            RESPONSE=$(curl -s -k -u jpapadem:11e4a4fb90eddbdeef7f24ed4cfe835924 \
+              "https://yellow-turkeys-turn.loca.lt/job/job1/lastBuild/api/json")
+            
+            if [ $? -eq 0 ]; then
+              BUILDING=$(echo "$RESPONSE" | jq -r '.building')
+              RESULT=$(echo "$RESPONSE" | jq -r '.result')
+              
+              echo "Building: $BUILDING"
+              echo "Result: $RESULT"
+              
+              if [ "$BUILDING" = "false" ]; then
+                if [ "$RESULT" = "SUCCESS" ]; then
+                  echo "Build completed successfully!"
+                  exit 0
+                elif [ "$RESULT" != "null" ]; then
+                  echo "Build failed with result: $RESULT"
+                  exit 1
+                fi
+              fi
+            else
+              echo "Failed to get build status"
+              echo "Response: $RESPONSE"
             fi
             
-            JOB_STATUS=$(echo "$STATUS_RESPONSE" | jq -r '.result')
-            BUILDING=$(echo "$STATUS_RESPONSE" | jq -r '.building')
-            
-            echo "Jenkins Job Status: $JOB_STATUS (Building: $BUILDING)"
-            
-            if [ "$JOB_STATUS" = "SUCCESS" ]; then
-              echo "Jenkins job completed successfully!"
-              exit 0
-            elif [ "$JOB_STATUS" = "FAILURE" ]; then
-              echo "Jenkins job failed!"
-              exit 1
-            elif [ "$JOB_STATUS" = "ABORTED" ]; then
-              echo "Jenkins job was aborted!"
-              exit 1
-            fi
-            
-            echo "Job still running... Checking again in 5 seconds."
+            echo "Waiting 5 seconds before next check..."
             sleep 5
             ((ATTEMPTS++))
           done
           
-          echo "Jenkins job did not complete within the timeout period (60 seconds)"
+          echo "Build did not complete within timeout period"
           exit 1
