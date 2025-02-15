@@ -15,7 +15,7 @@ jobs:
         env:
           JENKINS_USER: jpapadem
           JENKINS_TOKEN: 11e4a4fb90eddbdeef7f24ed4cfe835924
-          JENKINS_URL: "https://rotten-rats-give.loca.lt"
+          JENKINS_URL: "https://bumpy-loops-notice.loca.lt"
           JOB_NAME: "job1"
         run: |
           # Check Jenkins connection
